@@ -1,27 +1,19 @@
-# Enforce `+fma` on x86 hosts so that `f32::mul_add` / `f64::mul_add`
-# emit a hardware fused op (single rounding). The FPU emulator and the
-# differential oracle both rely on `mul_add` being truly fused — without
-# `+fma` the compiler falls back to `a*b + c` (two roundings), which would
-# produce UFC/IXC classification mismatches on boundary operands.
+# Enable `+fma` on x86 hosts so `f32::mul_add` / `f64::mul_add` inline to a
+# hardware fused op instead of calling the correctly-rounded `fmaf`/`fma`
+# libm fallback. This is a performance optimisation, not a correctness
+# requirement: Rust's `mul_add` performs a single rounding on every target,
+# so the emulator and the reference oracle agree bit-for-bit either way.
+#
+# The cfg form covers every x86_64 triple (gnu, msvc, musl, ...). Do not
+# extend this to AArch64: rustc treats `fma` as an unknown target feature
+# there even though the hardware instruction is part of the base FP/SIMD ISA.
+#
+# NOTE: an exported `RUSTFLAGS` / `CARGO_ENCODED_RUSTFLAGS`, even an empty
+# one, *replaces* these flags instead of adding to them. If FMA codegen
+# matters, leave RUSTFLAGS unset (`unset RUSTFLAGS`) or repeat the flag.
 #
 # See `fp_fma` in `crates/rp2350-emu/src/core/execute_fpu.rs` and `ref_fma`
 # in `crates/picoem-harness/src/ieee754_ref.rs`.
-#
-# Belt-and-braces: `ieee754_ref.rs` also has a `compile_error!` gated on
-# `target_feature = "fma"` on x86 and allows AArch64, where fused
-# multiply-add is part of the base FP/SIMD ISA used by macOS.
 
-[target.x86_64-pc-windows-msvc]
+[target.'cfg(target_arch = "x86_64")']
 rustflags = ["-C", "target-feature=+fma"]
-
-[target.x86_64-pc-windows-gnu]
-rustflags = ["-C", "target-feature=+fma"]
-
-[target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "target-feature=+fma"]
-
-[target.x86_64-apple-darwin]
-rustflags = ["-C", "target-feature=+fma"]
-
-# Do not set `target-feature=+fma` for Apple Silicon: rustc rejects that
-# feature name on AArch64 even though the hardware instruction is present.

@@ -24,27 +24,17 @@
 // flag word.
 
 // The reference oracle relies on `f64::mul_add` being a true single-rounding
-// fused op (for `ref_fma` and the division residual probe). Without the
-// `+fma` target feature on x86 the compiler falls back to a * b + c
-// with two roundings, which silently de-synchronises the oracle from the
-// emulator (which uses `f32::mul_add`) and masks boundary bugs. AArch64
-// has fused multiply-add in the base FP/SIMD ISA used by macOS, but Rust
-// does not expose a `target_feature = "fma"` cfg there.
+// fused op (for `ref_fma` and the division residual probe). That guarantee
+// comes from the standard library, not from a target feature: `mul_add`
+// always performs one rounding. Without `+fma` the intrinsic lowers to a
+// call to the correctly-rounded `fmaf`/`fma` (libm or compiler-builtins
+// softfloat); with `+fma` it inlines to a single `vfmadd`/`fmadd`
+// instruction. `.cargo/config.toml` enables the feature on x86 purely for
+// speed, so a build without it is still correct and must not fail.
 //
-// Exclude `doctest` builds: rustdoc compiles doctests without the rustflags
-// declared in `.cargo/config.toml`, so the `+fma` check would spuriously
-// trigger. Doctests here do not execute FMA-sensitive code, and the real
-// `cargo test` path still enforces the feature via `--lib`/`--bin`.
-#[cfg(all(
-    not(target_feature = "fma"),
-    not(target_arch = "aarch64"),
-    not(doctest)
-))]
-compile_error!(
-    "picoem-harness requires the +fma target feature. \
-     Add 'rustflags = [\"-C\", \"target-feature=+fma\"]' to your \
-     target's section in .cargo/config.toml."
-);
+// Note: an exported `RUSTFLAGS` (or `CARGO_ENCODED_RUSTFLAGS`), even an
+// empty one, replaces the config's rustflags rather than adding to them,
+// which silently disables `+fma` codegen.
 
 pub const IOC: u32 = 1 << 0;
 pub const DZC: u32 = 1 << 1;
