@@ -157,7 +157,10 @@ fn rdtscp() -> u64 {
 /// clear message if not. All modern x86_64 CPUs (since ~2008) support this.
 #[cfg(target_arch = "x86_64")]
 fn require_constant_tsc() {
-    let result = std::arch::x86_64::__cpuid(0x80000007);
+    // SAFETY: on x86_64 the CPUID instruction is architecturally guaranteed
+    // to exist, and `0x80000007` is a read-only extended leaf. The intrinsic
+    // is `unsafe` only because CPUID is not guaranteed on 32-bit x86.
+    let result = unsafe { std::arch::x86_64::__cpuid(0x80000007) };
     let has_invariant_tsc = (result.edx >> 8) & 1 != 0;
     assert!(
         has_invariant_tsc,
